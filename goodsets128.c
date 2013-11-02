@@ -1,3 +1,11 @@
+/* This program calculates goodsets for a tensor of structure constants.
+ * The tensor is input from a file. First line contains rank of tensor. 
+ * Next rank^3 lines describe the tensor, one entry per line
+ *
+ * Maximum rank and order are compile time options for performance reason.
+ * Faster options - rank limited to 64, order limited to 256.
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -12,6 +20,7 @@
 #endif
 
 #define MAXRANK 64
+
 #if 1
 #define ORDERTYPE uint8_t
 #define MAXORDER 256
@@ -21,6 +30,7 @@
 #define MAXORDER 65536
 #define MASKSSIZE 16
 #endif
+
 #define ORDERMASK ((uint64_t)MAXORDER-1)
 #define ORDERSPER (8/sizeof(ORDERTYPE))
 #define ORDERBITS (8*sizeof(ORDERTYPE))
@@ -362,65 +372,6 @@ set *symgoodsets_ham(set start, set end) {
         }
         NEXT(t1);
     } while(!EQ(t1,end));
-
-    return t;
-}
-
-set *symgoodsets(set start, set end) {
-    set *t, *r, *b=symsets, t1, t2;
-    char s[1000];
-    ORDERTYPE mulres[MAXRANK];
-
-    t=malloc(sizeof(set)*(1000000+1));
-    SSET_SETSIZE(t,0);
-    t1=start;
-
-    while(BEFORE_EQ(t1,end)) {
-        int st2[MAXRANK];
-        int c,i,j,k,r;
-        j=0;
-        k=0;
-        c=0;
-        SET_EMPTY(t2);
-        for(i=0;i<srank;i++) {
-            if(IS_IN(t1,i)) {
-                if(k==0) {
-                    k=1;
-                    r=i;
-                } else {
-                    k=0;
-                    st2[c++]=r+65536*i;
-                }
-                UNITE(t2,b[i+1]);
-            }
-        }
-        if(k==0) {
-            st2[c]=-1;
-        } else {
-            st2[c]=r+65536*r;
-            st2[c+1]=-1;
-        }
-        mul_i2(mulres, st2, st2);
-        if(!check_splits( mulres, t2)) {
-            int q;
-            if(verygood) {
-                set t3[MAXRANK*MAXRANK+1];
-                set p[3];
-                int i;
-                SSET_SETSIZE(p,2);
-                p[1]=t2;
-                p[2]=DIFFERENCE(NBITS(rank),t2);  
-                q=wl(p, t3, t2);
-            } else q=1;
-            if(q) {
-                SSET_ADDSET(t,t2);
-                if((SSET_SIZE(t) % 1000000) == 0) {
-                    t=realloc(t,(SSET_SIZE(t)+1000001)*sizeof(set));
-                }
-            }
-        }
-        NEXT(t1);
-    }
 
     return t;
 }
