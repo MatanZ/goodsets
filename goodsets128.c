@@ -191,6 +191,45 @@ void mul_sq(ORDERTYPE *mulres, set s, int difbit) {
     }
 }
 
+void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
+    unsigned long *m=(unsigned long *)mulres;
+    int i,j,l;
+    l=0;
+    s=DIFFERENCE(s,BITN(difbit));
+    for(i=0;i<rank;i++)
+        if(IS_IN(s,i)) {
+            if(l) {
+                int k;
+                unsigned long *p = (unsigned long *)dtensor_l[difbit][j][i];
+                unsigned long *p2 = (unsigned long *)dtensor_l[difbit][i][j];
+                for(k=0;k<ur;k++) {
+                    m[k]+=p[k];
+                    m[k]+=p2[k];
+                }
+                l=0;
+            } else {
+                l=1;
+                j=i;
+            }
+        }
+    if(l) {
+        int k;
+        unsigned long *p = (unsigned long *)tensor[difbit][j];
+        unsigned long *p2 = (unsigned long *)tensor[j][difbit];
+        for(k=0;k<ur;k++) {
+            m[k]+=p[k];
+            m[k]+=p2[k];
+        }
+    }
+    {
+        int k;
+        unsigned long *p = (unsigned long *)tensor[difbit][difbit];
+        for(k=0;k<ur;k++) {
+            m[k]+=p[k];
+        }
+    }
+}
+ 
 void mul_i2(ORDERTYPE *mulres, int *s, int *t) {
     int *a, *b;
     unsigned long *m=(unsigned long *)mulres;
@@ -387,7 +426,7 @@ void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res) {
         antigoodsets_level(s, mulres, pos+1, res);
         t=UNION(s,msets[pos][0]);
         memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
-        mul_sq(mulres2, t, msetsi[pos][0]);
+        mul_sq2(mulres2, t, msetsi[pos][0]);
         if(!check_splits( mulres2, t)) {
             int q;
             if(verygood) {
@@ -409,7 +448,7 @@ void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res) {
         antigoodsets_level(t, mulres2, pos+1, res);
         t=UNION(s,msets[pos][1]);
         memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
-        mul_sq(mulres2, t, msetsi[pos][1]);
+        mul_sq2(mulres2, t, msetsi[pos][1]);
         antigoodsets_level(t, mulres2, pos+1, res);
     }
 }
@@ -420,6 +459,24 @@ set *antigoodsets_rec(char *in) {
     set *t;
     ORDERTYPE mulres[MAXRANK];
 
+    for(i=0;i<rank;i++) {
+        set t1;
+        int k;
+        t1=BITN(i);
+        for(k=0;k<rank;k++) {
+            set t2;
+            int l,j;
+            for(l=0;l<rank;l++) {
+                ORDERTYPE mulres[MAXRANK];
+                t2=UNION(BITN(k),BITN(l));
+                if(l<=k) {
+                    mul(dtensor_l[i][k][l], t1, t2);
+                } else {
+                    mul(dtensor_l[i][k][l], t2, t1);
+                }
+            }
+        }
+    }
     n=0;
     for(i=0;i<rank;i++)
         if(mates[i]>i) {
