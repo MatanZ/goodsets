@@ -55,7 +55,7 @@ ORDERTYPE dtensor[MAXRANK][MAXRANK][MAXRANK][MAXRANK][MAXRANK];
 ORDERTYPE dtensor_l[MAXRANK][MAXRANK][MAXRANK][MAXRANK];
 static set *symsets;
 static int mates[MAXRANK];
-static int rank, srank;
+static int rank, srank, arank;
 static int ur;
 static set ref, sym, anti;
 
@@ -119,6 +119,7 @@ int readtensor(FILE *f) {
         }
     }
     srank=SIZE(sym)+SIZE(anti)/2;
+    arank=SIZE(anti)/2;
     return 0;
 }
 
@@ -372,6 +373,68 @@ set *symgoodsets_ham(set start, set end) {
         }
         NEXT(t1);
     } while(!EQ(t1,end));
+
+    return t;
+}
+
+set msets[MAXRANK][2];
+int msetsi[MAXRANK][2];
+
+void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res) {
+    ORDERTYPE mulres2[MAXRANK];
+    if(pos<arank) {
+        set t;
+        antigoodsets_level(s, mulres, pos+1, res);
+        t=UNION(s,msets[pos][0]);
+        memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
+        mul_sq(mulres2, t, msetsi[pos][0]);
+        if(!check_splits( mulres2, t)) {
+            int q;
+            if(verygood) {
+                set t3[MAXRANK*MAXRANK+1];
+                set p[3];
+                int i;
+                SSET_SETSIZE(p,2);
+                p[1]=t;
+                p[2]=DIFFERENCE(NBITS(rank),t);
+                q=wl(p, t3, t);
+            } else q=1;
+            if(q) {
+                SSET_ADDSET(res,t);
+                if((SSET_SIZE(res) % 1000000) == 0) {
+                    res=realloc(res,SSET_SIZE(res)+1000000*sizeof(set));
+                }
+            }
+        }
+        antigoodsets_level(t, mulres2, pos+1, res);
+        t=UNION(s,msets[pos][1]);
+        memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
+        mul_sq(mulres2, t, msetsi[pos][1]);
+        antigoodsets_level(t, mulres2, pos+1, res);
+    }
+}
+
+set *antigoodsets_rec(char *in) {
+    int i,n;
+    set s;
+    set *t;
+    ORDERTYPE mulres[MAXRANK];
+
+    n=0;
+    for(i=0;i<rank;i++)
+        if(mates[i]>i) {
+            msets[n][0]=BITN(i);
+            msets[n][1]=BITN(mates[i]);
+            msetsi[n][0]=(i);
+            msetsi[n][1]=(mates[i]);
+            //fprintf(stderr, "%i %i\n", i, mates[i]);
+            n++;
+        }
+    bzero(mulres, MAXRANK*sizeof(ORDERTYPE));
+    SET_EMPTY(s);
+    t=malloc(sizeof(set)*1000000);
+    SSET_SETSIZE(t,0);
+    antigoodsets_level( s, mulres, 0, t);
 
     return t;
 }
@@ -647,7 +710,7 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            if(nthreads>1) {
+            if((nthreads>1)&&(srank>10)) {
                 set d,t;
                 d=SET_DIV(SET_MINUS(end,start),nthreads);
                 t=start;
@@ -750,7 +813,8 @@ int main(int argc, char *argv[]) {
             } else {
                 set t1;
                 int j;
-                t=antigoodsets(as);
+                //t=antigoodsets(as);
+                t=antigoodsets_rec(as);
                 gapsets(t);
                 for(i=1;i<=SSET_SIZE(t);i++) {
                     t1=EMPTYSET;
