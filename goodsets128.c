@@ -449,7 +449,6 @@ set *antigoodsets_rec(char *in) {
     int i,n;
     set s;
     set *t;
-    char st[1000];
     ORDERTYPE mulres[MAXRANK];
 
     if(!in) in="";
@@ -459,7 +458,6 @@ set *antigoodsets_rec(char *in) {
     mul(mulres, s, s);
     t=malloc(sizeof(set)*1000000);
     SSET_SETSIZE(t,0);
-    gapset(s,st);
     antigoodsets_level( s, mulres, n, t, IS_EMPTY(s));
 
     return t;
