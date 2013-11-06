@@ -35,7 +35,7 @@ typedef struct {
 #define SIZE(a) (size2((a).l)+size2((a).h))
 #define IMP(a,b) UNION(COMPLEMENT(a),b)
 #define IS_IN(s,e) ((e)>63?((1ull<<((e)-64))&(s).h):((1ull<<(e))&(s).l))
-#define IS_EMPTY(s) ((s)==EMPTYSET)
+#define IS_EMPTY(s) (((s).l==EMPTYSET.l)&&((s).h==EMPTYSET.h))
 #define SET_EMPTY(s) s=EMPTYSET
 
 // The result of this is int, so l<=64:

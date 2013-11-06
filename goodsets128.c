@@ -3,7 +3,7 @@
  * Next rank^3 lines describe the tensor, one entry per line
  *
  * Maximum rank and order are compile time options for performance reason.
- * Faster options - rank limited to 64, order limited to 256.
+ * Fastest options - rank limited to 64, order limited to 256.
  */
 
 #include <stdlib.h>
@@ -21,7 +21,7 @@
 
 #define MAXRANK 64
 
-#if 1
+#ifndef ORDER16
 #define ORDERTYPE uint8_t
 #define MAXORDER 256
 #define MASKSSIZE 256
@@ -51,7 +51,6 @@ pthread_mutex_t mutex;
 pthread_cond_t cond;
 
 ORDERTYPE tensor[MAXRANK][MAXRANK][MAXRANK];
-ORDERTYPE dtensor[MAXRANK][MAXRANK][MAXRANK][MAXRANK][MAXRANK];
 ORDERTYPE dtensor_l[MAXRANK][MAXRANK][MAXRANK][MAXRANK];
 static set *symsets;
 static int mates[MAXRANK];
@@ -123,6 +122,12 @@ int readtensor(FILE *f) {
     return 0;
 }
 
+/* 
+ * Calculates s^2, given (s-{i})^2 or (sU{i})^2.
+ * dtensor_l[i][j][k] is {i}{j,k}+{j,k}{i}.
+ * Here i,j,k represents symmetric basic sets, that is symmetric relation or
+ * unions of antisymmetric pairs.
+ */
 void mul_sq(ORDERTYPE *mulres, set s, int difbit) {
     unsigned long *m=(unsigned long *)mulres;
     if(IS_IN(s,difbit)) {
@@ -191,6 +196,10 @@ void mul_sq(ORDERTYPE *mulres, set s, int difbit) {
     }
 }
 
+/* 
+ * Calculates s^2, given (s-{i})^2.
+ * dtensor_l[i][j][k] is {i}{j,k}+{j,k}{i}
+ */
 void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
     unsigned long *m=(unsigned long *)mulres;
     int i,j,l;
@@ -201,10 +210,8 @@ void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
             if(l) {
                 int k;
                 unsigned long *p = (unsigned long *)dtensor_l[difbit][j][i];
-//                unsigned long *p2 = (unsigned long *)dtensor_l[difbit][i][j];
                 for(k=0;k<ur;k++) {
                     m[k]+=p[k];
-//                    m[k]+=p2[k];
                 }
                 l=0;
             } else {
@@ -214,11 +221,9 @@ void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
         }
     if(l) {
         int k;
-        unsigned long *p = (unsigned long *)tensor[difbit][j];
-//        unsigned long *p2 = (unsigned long *)tensor[j][difbit];
+        unsigned long *p = (unsigned long *)dtensor_l[difbit][j][j];
         for(k=0;k<ur;k++) {
             m[k]+=p[k];
-//            m[k]+=p2[k];
         }
     }
     {
@@ -230,40 +235,6 @@ void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
     }
 }
  
-void mul_i2(ORDERTYPE *mulres, int *s, int *t) {
-    int *a, *b;
-    unsigned long *m=(unsigned long *)mulres;
-    bzero(mulres,sizeof(ORDERTYPE)*rank);
-    a=s;
-    while(*a>=0) {
-        b=t;
-        while (*b>=0) {
-            int i;
-            unsigned long *p = (unsigned long *)dtensor[(*a)&0xffff][(*a)>>16][(*b)&0xffff][(*b)>>16];
-            for(i=0;i<ur;i++) m[i]+=p[i];
-            b++;
-        }
-        a++;
-    }
-}
-
-void mul_i(ORDERTYPE *mulres, int *s, int *t) {
-    int *a, *b;
-    unsigned long *m=(unsigned long *)mulres;
-    bzero(mulres,sizeof(ORDERTYPE)*rank);
-    a=s;
-    while(*a>=0) {
-        b=t;
-        while (*b>=0) {
-            int i;
-            unsigned long *p = (unsigned long *)tensor[*a][*b];
-            for(i=0;i<ur;i++) m[i]+=p[i];
-            b++;
-        }
-        a++;
-    }
-}
-
 void mul(ORDERTYPE *mulres, set s, set t) {
     int i,j,k;
     unsigned long *m=(unsigned long *)mulres;
@@ -351,7 +322,7 @@ int wl_onestep(set *p, set *t1, set nb) {
     return 1;
 }
 
-/* Stabilizer p, return result in t1.
+/* Stabilize p, return result in t1.
  * If nb is a set of some intermediate partition and is later
  * split, return 0, and t1 is undefined 
  */
@@ -478,131 +449,19 @@ set *antigoodsets_rec(char *in) {
     int i,n;
     set s;
     set *t;
+    char st[1000];
     ORDERTYPE mulres[MAXRANK];
 
-   bzero(mulres, MAXRANK*sizeof(ORDERTYPE));
+    if(!in) in="";
+    n=strlen(in);
     SET_EMPTY(s);
+    for(i=0;i<n;i++) if(in[i]!='0') UNITE(s,msets[i][in[i]-'1']);
+    mul(mulres, s, s);
     t=malloc(sizeof(set)*1000000);
     SSET_SETSIZE(t,0);
-    antigoodsets_level( s, mulres, 0, t, 1);
+    gapset(s,st);
+    antigoodsets_level( s, mulres, n, t, IS_EMPTY(s));
 
-    return t;
-}
-
-set *antigoodsets(char *in) {
-    int sel[MAXRANK];
-    int lensel;
-    int lastnonzero;
-    int work;
-    set msets[MAXRANK][2];
-    int msetsi[MAXRANK][2];
-    int n, i;
-    ORDERTYPE mulres[MAXRANK];
-    set *t;
-    t=malloc(sizeof(set)*1000000);
-    SSET_SETSIZE(t,0);
-    n=0;
-
-    for(i=0;i<rank;i++)
-        if(mates[i]>i) {
-            msets[n][0]=BITN(i);
-            msets[n][1]=BITN(mates[i]);
-            msetsi[n][0]=(i);
-            msetsi[n][1]=(mates[i]);
-            //fprintf(stderr, "%i %i\n", i, mates[i]);
-            n++;
-        }
-    if(in) {
-        //fprintf(stderr,"%s\n",in);
-        lastnonzero=-1;
-        i=n-1;
-        bzero(sel,sizeof(int)*n);
-        while(*in) {
-            sel[i]=*in-'0';
-            if(sel[i]&&(lastnonzero<0))lastnonzero=i;
-            in++;
-            i--;
-        }
-        if(lastnonzero==-1){
-            lensel=1;
-            sel[0]=1;
-            work=i-1;
-        } else {
-            lensel=lastnonzero+1;
-            work=i;
-        }
-        //fprintf(stderr," %i %i\n", lensel, work);
-    } else {
-        lensel=1;
-        sel[0]=1;
-        work=n;
-    }
-    while(lensel<=n) {
-        set s;
-        int st2[MAXRANK];
-        int c,j,k,r;
-        SET_EMPTY(s);
-        j=0;
-        k=0;
-        c=0;
-        for(i=0;i<lensel;i++) 
-            if(sel[i]) {
-                if(k==0) {
-                    k=1;
-                    r=msetsi[i][sel[i]-1];
-                } else {
-                    k=0;
-                    st2[c++]=r+65536*msetsi[i][sel[i]-1];
-                }
-
-                UNITE(s,msets[i][sel[i]-1]);
-            }
-        if(k==0) {
-            st2[c]=-1;
-        } else {
-            st2[c]=r+65536*r;
-            st2[c+1]=-1;
-        }
-        mul_i2(mulres, st2, st2);
-        r=check_splits( mulres, s);
-        if(!r) {
-            int q;
-            if(verygood) {
-                set t3[MAXRANK*MAXRANK+1];
-                set p[3];
-                int i;
-                SSET_SETSIZE(p,2);
-                p[1]=s;
-                p[2]=DIFFERENCE(NBITS(rank),s);
-                q=wl(p, t3, s);
-            } else q=1;
-            if(q) {
-                SSET_ADDSET(t,s);
-                if((SSET_SIZE(t) % 1000000) == 0) {
-                    t=realloc(t,SSET_SIZE(t)+1000000*sizeof(set));
-                }
-            }
-        }
-        j=0;
-        c=0;
-        while(1) {
-            if(sel[j]<2) {
-                sel[j]++;
-                break;
-            } else {
-                sel[j]=0;
-            }
-            j++;
-            if(j>work) {
-                return t;
-            }
-        }
-        if(sel[lensel-1]==2){
-            sel[lensel-1]=0;
-            sel[lensel]=1;
-            lensel++;
-        }
-    }
     return t;
 }
 
@@ -616,7 +475,7 @@ void *symthread(void *arg) {
 void *antithread(void *arg) {
     struct threadparam *p=(struct threadparam *)arg;
     set *t;
-    p->output=antigoodsets(p->a_work);
+    p->output=antigoodsets_rec(p->a_work);
     p->stat=2;
     pthread_cond_signal(&cond);
     return 0;
@@ -696,7 +555,6 @@ int main(int argc, char *argv[]) {
             end=NBITS(srank);
             as=NULL;
         }
-
 #if 0
         fprintf(stderr, "rank=%i srank=%i\n", rank, srank);
         gapset(ref, s);
@@ -729,20 +587,6 @@ int main(int argc, char *argv[]) {
             }
             fprintf(stderr,"\n");
 #endif
-            for(i=0;i<srank;i++) {
-                int j;
-                for(j=0;j<srank;j++) {
-                    int k;
-                    t1=UNION(symsets[i+1],symsets[j+1]);
-                    for(k=0;k<srank;k++) {
-                        int l;
-                        for(l=0;l<srank;l++) {
-                            t2=UNION(symsets[k+1],symsets[l+1]);
-                            mul(dtensor[i][j][k][l], t1, t2);
-                        }
-                    }
-                }
-            }
             for(i=0;i<srank;i++) {
                 int k;
                 t1=symsets[i+1];
@@ -788,26 +632,6 @@ int main(int argc, char *argv[]) {
         if(do_anti) {
             int t1[3],t2[3];
             int i,j,k,l,n;
-#if 0
-            t1[2]=-1;
-            t2[2]=-1;
-            for(i=0;i<rank;i++) {
-                int j;
-                t1[0]=i;
-                for(j=0;j<rank;j++) {
-                    int k;
-                    t1[1]=(i==j)?-1:j;
-                    for(k=0;k<rank;k++) {
-                        int l;
-                        t2[0]=k;
-                        for(l=0;l<rank;l++) {
-                            t2[1]=(k==l)?-1:l;
-                            mul_i(dtensor[i][j][k][l], t1, t2);
-                        }
-                    }
-                }
-            }
-#endif
             for(i=0;i<rank;i++) {
                 set t1;
                 int k;
@@ -819,7 +643,7 @@ int main(int argc, char *argv[]) {
                         ORDERTYPE mulres[MAXRANK];
                         t2=UNION(BITN(k),BITN(l));
                             mul(dtensor_l[i][k][l], t1, t2);
-                            if((l!=k)||(l!=i)) {
+                            if(1) {
                                 mul(mulres, t2, t1);
                                 for(j=0;j<rank;j++)dtensor_l[i][k][l][j]+=mulres[j];
                             }
@@ -833,26 +657,33 @@ int main(int argc, char *argv[]) {
                     msets[n][1]=BITN(mates[i]);
                     msetsi[n][0]=(i);
                     msetsi[n][1]=(mates[i]);
-                    //fprintf(stderr, "%i %i\n", i, mates[i]);
                     n++;
                 }
  
             if(nthreads>1) {
                 int i, nz, p, n, done;
-                char *zs[14]={ "001", "010", "011", "012", "100", "101", "102", "110", "111", "112", "120", "121", "122", "000" };
-                char *ns[27]={ "001", "002", "010", "011", "012", "020", "021", "022",
+                char *ns[27]={ "001", "010", "011", "012", 
                     "100", "101", "102", "110", "111", "112", "120", "121", "122",
-                    "200", "201", "202", "210", "211", "212", "220", "221", "222", "000" };
+                    "000" };
                 char **st;
 
-                if(as) strncpy(s, as, MAXRANK); else s[0]='\0';
-                if(strchr(s,'1') || strchr(s,'2')) {
-                    st=ns;
-                    p=27;
-                } else {
-                    st=zs;
-                    p=14;
+                anti_maxdepth=3;
+                t=antigoodsets_rec(as);
+                gapsets(t);
+                for(i=1;i<=SSET_SIZE(t);i++) {
+                    set t1;
+                    int j;
+                    t1=EMPTYSET;
+                    for(j=1;j<MAXRANK;j++) if (IS_IN(t[i],j)) UNITE(t1,BITN(mates[j]));
+                    t[i]=t1;
                 }
+                if( SSET_SIZE(t)>0) {
+                    gapsets(t);
+                } else printf("[],\n");
+
+                anti_maxdepth=arank;
+                st=ns;
+                p=14;
                 for(i=0;i<nthreads;i++) params[i].stat=0;
                 n=0;
                 done=0;
@@ -861,8 +692,7 @@ int main(int argc, char *argv[]) {
                     struct timespec tw;
                     for(i=0;i<nthreads;i++) if(n<p &&(params[i].stat==0)) {
                         params[i].stat=1;
-                        strcpy(params[i].a_work,s);
-                        strcat(params[i].a_work,st[n]);
+                        strcpy(params[i].a_work,st[n]);
                         pthread_create(&threads[i], NULL, antithread, &params[i]);
                         n++;
                     }
@@ -894,7 +724,6 @@ int main(int argc, char *argv[]) {
             } else {
                 set t1;
                 int j;
-                //t=antigoodsets(as);
                 anti_maxdepth=arank;
                 t=antigoodsets_rec(as);
                 gapsets(t);
