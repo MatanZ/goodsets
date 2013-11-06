@@ -1,7 +1,7 @@
 TARGETS = goodsets goodsets128 goodsets128h
 
 
-CFLAGS=-O3 -fomit-frame-pointer -funroll-all-loops -pthread -lrt -march=corei7
+CFLAGS=-O3 -fomit-frame-pointer -funroll-all-loops -pthread -lrt
 #CFLAGS=-g 
 
 CC ?= gcc

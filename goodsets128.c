@@ -201,10 +201,10 @@ void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
             if(l) {
                 int k;
                 unsigned long *p = (unsigned long *)dtensor_l[difbit][j][i];
-                unsigned long *p2 = (unsigned long *)dtensor_l[difbit][i][j];
+//                unsigned long *p2 = (unsigned long *)dtensor_l[difbit][i][j];
                 for(k=0;k<ur;k++) {
                     m[k]+=p[k];
-                    m[k]+=p2[k];
+//                    m[k]+=p2[k];
                 }
                 l=0;
             } else {
@@ -215,10 +215,10 @@ void mul_sq2(ORDERTYPE *mulres, set s, int difbit) {
     if(l) {
         int k;
         unsigned long *p = (unsigned long *)tensor[difbit][j];
-        unsigned long *p2 = (unsigned long *)tensor[j][difbit];
+//        unsigned long *p2 = (unsigned long *)tensor[j][difbit];
         for(k=0;k<ur;k++) {
             m[k]+=p[k];
-            m[k]+=p2[k];
+//            m[k]+=p2[k];
         }
     }
     {
@@ -418,12 +418,13 @@ set *symgoodsets_ham(set start, set end) {
 
 set msets[MAXRANK][2];
 int msetsi[MAXRANK][2];
+int anti_maxdepth;
 
-void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res) {
+void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res, int allz) {
     ORDERTYPE mulres2[MAXRANK];
-    if(pos<arank) {
+    if(pos<anti_maxdepth) {
         set t;
-        antigoodsets_level(s, mulres, pos+1, res);
+        antigoodsets_level(s, mulres, pos+1, res, allz);
         t=UNION(s,msets[pos][0]);
         memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
         mul_sq2(mulres2, t, msetsi[pos][0]);
@@ -445,11 +446,31 @@ void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res) {
                 }
             }
         }
-        antigoodsets_level(t, mulres2, pos+1, res);
-        t=UNION(s,msets[pos][1]);
-        memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
-        mul_sq2(mulres2, t, msetsi[pos][1]);
-        antigoodsets_level(t, mulres2, pos+1, res);
+        antigoodsets_level(t, mulres2, pos+1, res, 0);
+        if(!allz) {
+            t=UNION(s,msets[pos][1]);
+            memcpy(mulres2, mulres, rank*sizeof(ORDERTYPE));
+            mul_sq2(mulres2, t, msetsi[pos][1]);
+            if(!check_splits( mulres2, t)) {
+                int q;
+                if(verygood) {
+                    set t3[MAXRANK*MAXRANK+1];
+                    set p[3];
+                    int i;
+                    SSET_SETSIZE(p,2);
+                    p[1]=t;
+                    p[2]=DIFFERENCE(NBITS(rank),t);
+                    q=wl(p, t3, t);
+                } else q=1;
+                    if(q) {
+                        SSET_ADDSET(res,t);
+                    if((SSET_SIZE(res) % 1000000) == 0) {
+                        res=realloc(res,SSET_SIZE(res)+1000000*sizeof(set));
+                    }
+                }
+            }
+            antigoodsets_level(t, mulres2, pos+1, res,0);
+        }
     }
 }
 
@@ -459,39 +480,11 @@ set *antigoodsets_rec(char *in) {
     set *t;
     ORDERTYPE mulres[MAXRANK];
 
-    for(i=0;i<rank;i++) {
-        set t1;
-        int k;
-        t1=BITN(i);
-        for(k=0;k<rank;k++) {
-            set t2;
-            int l,j;
-            for(l=0;l<rank;l++) {
-                ORDERTYPE mulres[MAXRANK];
-                t2=UNION(BITN(k),BITN(l));
-                if(l<=k) {
-                    mul(dtensor_l[i][k][l], t1, t2);
-                } else {
-                    mul(dtensor_l[i][k][l], t2, t1);
-                }
-            }
-        }
-    }
-    n=0;
-    for(i=0;i<rank;i++)
-        if(mates[i]>i) {
-            msets[n][0]=BITN(i);
-            msets[n][1]=BITN(mates[i]);
-            msetsi[n][0]=(i);
-            msetsi[n][1]=(mates[i]);
-            //fprintf(stderr, "%i %i\n", i, mates[i]);
-            n++;
-        }
-    bzero(mulres, MAXRANK*sizeof(ORDERTYPE));
+   bzero(mulres, MAXRANK*sizeof(ORDERTYPE));
     SET_EMPTY(s);
     t=malloc(sizeof(set)*1000000);
     SSET_SETSIZE(t,0);
-    antigoodsets_level( s, mulres, 0, t);
+    antigoodsets_level( s, mulres, 0, t, 1);
 
     return t;
 }
@@ -794,7 +787,8 @@ int main(int argc, char *argv[]) {
         }
         if(do_anti) {
             int t1[3],t2[3];
-            int i,j,k,l;
+            int i,j,k,l,n;
+#if 0
             t1[2]=-1;
             t2[2]=-1;
             for(i=0;i<rank;i++) {
@@ -813,6 +807,36 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
+#endif
+            for(i=0;i<rank;i++) {
+                set t1;
+                int k;
+                t1=BITN(i);
+                for(k=0;k<rank;k++) {
+                    set t2;
+                    int l,j;
+                    for(l=0;l<rank;l++) {
+                        ORDERTYPE mulres[MAXRANK];
+                        t2=UNION(BITN(k),BITN(l));
+                            mul(dtensor_l[i][k][l], t1, t2);
+                            if((l!=k)||(l!=i)) {
+                                mul(mulres, t2, t1);
+                                for(j=0;j<rank;j++)dtensor_l[i][k][l][j]+=mulres[j];
+                            }
+                        }
+                    }
+                }
+            n=0;
+            for(i=0;i<rank;i++)
+                if(mates[i]>i) {
+                    msets[n][0]=BITN(i);
+                    msets[n][1]=BITN(mates[i]);
+                    msetsi[n][0]=(i);
+                    msetsi[n][1]=(mates[i]);
+                    //fprintf(stderr, "%i %i\n", i, mates[i]);
+                    n++;
+                }
+ 
             if(nthreads>1) {
                 int i, nz, p, n, done;
                 char *zs[14]={ "001", "010", "011", "012", "100", "101", "102", "110", "111", "112", "120", "121", "122", "000" };
@@ -871,6 +895,7 @@ int main(int argc, char *argv[]) {
                 set t1;
                 int j;
                 //t=antigoodsets(as);
+                anti_maxdepth=arank;
                 t=antigoodsets_rec(as);
                 gapsets(t);
                 for(i=1;i<=SSET_SIZE(t);i++) {
