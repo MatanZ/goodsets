@@ -641,10 +641,8 @@ int main(int argc, char *argv[]) {
                         ORDERTYPE mulres[MAXRANK];
                         t2=UNION(BITN(k),BITN(l));
                             mul(dtensor_l[i][k][l], t1, t2);
-                            if(1) {
-                                mul(mulres, t2, t1);
-                                for(j=0;j<rank;j++)dtensor_l[i][k][l][j]+=mulres[j];
-                            }
+                            mul(mulres, t2, t1);
+                            for(j=0;j<rank;j++)dtensor_l[i][k][l][j]+=mulres[j];
                         }
                     }
                 }
@@ -660,12 +658,20 @@ int main(int argc, char *argv[]) {
  
             if(nthreads>1) {
                 int i, nz, p, n, done;
-                char *ns[27]={ "001", "010", "011", "012", 
+                char *ns3[14]={ "001", "010", "011", "012", 
                     "100", "101", "102", "110", "111", "112", "120", "121", "122",
                     "000" };
+                char *ns4[41]={
+                    "0102", "0110", "0111", "0112", "0120", "0121", "0122", 
+                    "1000", "1001", "1002", "1010", "1011", "1012", "1020", 
+                    "1021", "1022", "1100", "1101", "1102", "1110", "1111", 
+                    "1112", "1120", "1121", "1122", "1200", "1201", "1202", 
+                    "1210", "1211", "1212", "1220", "1221", "1222", 
+                    "0100", "0101", "0010", "0011", "0012", "0001", "0000"
+                };
                 char **st;
 
-                anti_maxdepth=3;
+                anti_maxdepth=4;
                 t=antigoodsets_rec(as);
                 gapsets(t);
                 for(i=1;i<=SSET_SIZE(t);i++) {
@@ -680,8 +686,8 @@ int main(int argc, char *argv[]) {
                 } else printf("[],\n");
 
                 anti_maxdepth=arank;
-                st=ns;
-                p=14;
+                st=ns4;
+                p=41;
                 for(i=0;i<nthreads;i++) params[i].stat=0;
                 n=0;
                 done=0;
