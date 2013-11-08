@@ -433,8 +433,8 @@ void antigoodsets_level(set s, const ORDERTYPE *mulres, int pos, set * res, int 
                     p[2]=DIFFERENCE(NBITS(rank),t);
                     q=wl(p, t3, t);
                 } else q=1;
-                    if(q) {
-                        SSET_ADDSET(res,t);
+                if(q) {
+                    SSET_ADDSET(res,t);
                     if((SSET_SIZE(res) % 1000000) == 0) {
                         res=realloc(res,SSET_SIZE(res)+1000000*sizeof(set));
                     }
@@ -630,6 +630,7 @@ int main(int argc, char *argv[]) {
         if(do_anti) {
             int t1[3],t2[3];
             int i,j,k,l,n;
+            int wrotesomething=0;
             for(i=0;i<rank;i++) {
                 set t1;
                 int k;
@@ -656,8 +657,12 @@ int main(int argc, char *argv[]) {
                     n++;
                 }
  
-            if(nthreads>1) {
+            if((nthreads>1)&&(arank>8)) {
                 int i, nz, p, n, done;
+                char *nsf3[27]={ 
+                    "100", "101", "102", "110", "111", "112", "120", "121", "122",
+                    "200", "201", "202", "210", "211", "212", "220", "221", "222",
+                    "001", "010", "011", "012", "002", "020", "021", "022", "000" };
                 char *ns3[14]={ "001", "010", "011", "012", 
                     "100", "101", "102", "110", "111", "112", "120", "121", "122",
                     "000" };
@@ -670,8 +675,59 @@ int main(int argc, char *argv[]) {
                     "0100", "0101", "0010", "0011", "0012", "0001", "0000"
                 };
                 char **st;
+                if(as) {
+                    int allz=1;
+                    char *t=as;
+                    while(*t) {
+                        if (*t!='0')allz=0;
+                        t++;
+                    }
+                    anti_maxdepth=3+strlen(as);
+                    if(allz) {
+                        st=ns3;
+                        p=14;
+                    } else {
+                        st=nsf3;
+                        p=27;
+                    }
+                    // as itself is missed.
+                    if(!allz){
+                        int i,n;
+                        set s;
+                        set *t;
+                        ORDERTYPE mulres[MAXRANK];
 
-                anti_maxdepth=4;
+                        n=strlen(as);
+                        SET_EMPTY(s);
+                        for(i=0;i<n;i++) if(as[i]!='0') UNITE(s,msets[i][as[i]-'1']);
+                        mul(mulres, s, s);
+                        if(!check_splits( mulres, s)) {
+                            int q;
+                            if(verygood) {
+                                set t3[MAXRANK*MAXRANK+1];
+                                set p[3];
+                                int i;
+                                SSET_SETSIZE(p,2);
+                                p[1]=s;
+                                p[2]=DIFFERENCE(NBITS(rank),s);
+                                q=wl(p, t3, s);
+                            } else q=1;
+                            if(q) {
+                                set t[3];
+                                SSET_SETSIZE(t,2);
+                                t[1]=s;
+                                SET_EMPTY(t[2]);
+                                for(j=1;j<MAXRANK;j++) if (IS_IN(t[1],j)) UNITE(t[2],BITN(mates[j]));
+                                gapsets(t);
+                                wrotesomething=1;
+                            }
+                        }
+                    }
+                } else {
+                    anti_maxdepth=4;
+                    st=ns4;
+                    p=41;
+                }
                 t=antigoodsets_rec(as);
                 gapsets(t);
                 for(i=1;i<=SSET_SIZE(t);i++) {
@@ -683,11 +739,11 @@ int main(int argc, char *argv[]) {
                 }
                 if( SSET_SIZE(t)>0) {
                     gapsets(t);
-                } else printf("[],\n");
+                    wrotesomething=1;
+                }
+                fflush(stdout);
 
                 anti_maxdepth=arank;
-                st=ns4;
-                p=41;
                 for(i=0;i<nthreads;i++) params[i].stat=0;
                 n=0;
                 done=0;
@@ -696,7 +752,12 @@ int main(int argc, char *argv[]) {
                     struct timespec tw;
                     for(i=0;i<nthreads;i++) if(n<p &&(params[i].stat==0)) {
                         params[i].stat=1;
-                        strcpy(params[i].a_work,st[n]);
+                        if(as) {
+                            strcpy(params[i].a_work,as);
+                            strcat(params[i].a_work,st[n]);
+                        } else {
+                            strcpy(params[i].a_work,st[n]);
+                        }
                         pthread_create(&threads[i], NULL, antithread, &params[i]);
                         n++;
                     }
@@ -718,6 +779,7 @@ int main(int argc, char *argv[]) {
                         }
                         if( SSET_SIZE(params[i].output)>0) {
                             gapsets(params[i].output);
+                            wrotesomething=1;
                             fflush(stdout);
                         }
                         params[i].stat=0;
@@ -738,8 +800,10 @@ int main(int argc, char *argv[]) {
                 }
                 if( SSET_SIZE(t)>0) {
                     gapsets(t);
-                } else printf("[],\n");
+                    wrotesomething=1;
+                } 
             }
+            if(!wrotesomething)printf(" [],\n");
         }
     }
     return 0;
