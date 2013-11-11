@@ -18,7 +18,7 @@ typedef uint64_t set;
 #define IS_SUBSET(s,t) (UNION(s,t)==(s))
 
 #define NEXT(s) (s++)
-#define BEFORE_EQ(s,t) (s)<=(t)
+#define BEFORE_EQ(s,t) ((s)<=(t))
 
 #define BITN(a) (1ull<<(a))
 #define NBITS(a) (BITN(a)-1)
@@ -40,6 +40,7 @@ typedef uint64_t set;
 #define FIRST(s) first(s)
 #define PBITS(s,n,m) (((s)>>n)&NBITS(m))
 
+#define INT_SET(x) (x)
 // --------------------------------------------------------------
 // Utils
 void setsrealloc(set *s);

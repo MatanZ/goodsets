@@ -46,6 +46,7 @@ typedef struct {
 #define SSET_SETSIZE(s,n) s[0].l=n
 #define SSET_ADDSET(s,t) {SSET_SETSIZE(s,SSET_SIZE(s)+1); s[SSET_SIZE(s)]=t;}
 
+#define INT_SET(x) ((set){x,0ull}) 
 // --------------------------------------------------------------
 // Utils
 void setsrealloc(set *s);

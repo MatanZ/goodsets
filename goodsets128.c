@@ -344,7 +344,6 @@ set *symgoodsets_ham(set start, set end) {
     int a;
     char s[1000];
     ORDERTYPE mulres[MAXRANK];
-
     t=malloc(sizeof(set)*(1000000+1));
     SSET_SETSIZE(t,0);
     t1=start;
@@ -534,9 +533,9 @@ int main(int argc, char *argv[]) {
             }
             if(do_sym) {
                 if(argc>optind+2) {
-                    //start.l=strtoull(argv[optind+2],NULL,0);
+                    start=INT_SET(strtoull(argv[optind+2],NULL,0));
                     if(argc>optind+3) {
-                        //end.l=strtoull(argv[optind+3],NULL,0);
+                        end=INT_SET(strtoull(argv[optind+3],NULL,0));
                         if((!BEFORE_EQ(start,end))||(!BEFORE_EQ(end,NBITS(srank))))
                             end=NBITS(srank);
                     } else {
@@ -547,7 +546,6 @@ int main(int argc, char *argv[]) {
                     end=NBITS(srank);
                 }
             }
-                            
         } else {
             start=BITN(0);
             end=NBITS(srank);
