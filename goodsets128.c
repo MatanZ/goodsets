@@ -32,8 +32,8 @@
 #endif
 
 #define ORDERMASK ((uint64_t)MAXORDER-1)
-#define ORDERSPER (8/sizeof(ORDERTYPE))
-#define ORDERBITS (8*sizeof(ORDERTYPE))
+#define ORDERSPER (sizeof(long)/sizeof(ORDERTYPE))
+#define ORDERBITS (sizeof(long)*sizeof(ORDERTYPE))
 #define NRMASKS (1<<ORDERSPER)
 #define BITSMASK (NRMASKS-1)
 
@@ -60,8 +60,8 @@ static set ref, sym, anti;
 
 int verygood;
 
-uint64_t masks[MAXORDER];
-uint64_t bits[MASKSSIZE];
+unsigned long masks[MAXORDER];
+unsigned long bits[MASKSSIZE];
 
 int readtensor(FILE *f) {
     int i,j,k;    
@@ -505,10 +505,14 @@ int main(int argc, char *argv[]) {
         }
     }
     verygood=1;
-    while ((c = getopt (argc, argv, "dn:")) != -1) {
+    anti_maxdepth=-1;
+    while ((c = getopt (argc, argv, "dm:n:")) != -1) {
         switch (c) {
             case 'd':
                 verygood=0;
+                break;
+            case 'm':  /* only for single thread search */
+                anti_maxdepth=strtol(optarg, NULL, 0);
                 break;
             case 'n':
                 nthreads=strtol(optarg, NULL, 0);
@@ -785,10 +789,10 @@ int main(int argc, char *argv[]) {
                     } 
                     } while(nz);
                 }
-            } else {
+            } else { /* single thread */
                 set t1;
                 int j;
-                anti_maxdepth=arank;
+                if(anti_maxdepth<1 || anti_maxdepth>arank)anti_maxdepth=arank;
                 t=antigoodsets_rec(as);
                 gapsets(t);
                 for(i=1;i<=SSET_SIZE(t);i++) {
@@ -800,6 +804,41 @@ int main(int argc, char *argv[]) {
                     gapsets(t);
                     wrotesomething=1;
                 } 
+                // as itself is missed.
+                if(as){
+                    int i,n;
+                    set s;
+                    set *t;
+                    ORDERTYPE mulres[MAXRANK];
+
+                    n=strlen(as);
+                    SET_EMPTY(s);
+                    for(i=0;i<n;i++) if(as[i]!='0') UNITE(s,msets[i][as[i]-'1']);
+                    if(!IS_EMPTY(s)) {
+                        mul(mulres, s, s);
+                        if(!check_splits( mulres, s)) {
+                            int q;
+                            if(verygood) {
+                                set t3[MAXRANK*MAXRANK+1];
+                                set p[3];
+                                int i;
+                                SSET_SETSIZE(p,2);
+                                p[1]=s;
+                                p[2]=DIFFERENCE(NBITS(rank),s);
+                                q=wl(p, t3, s);
+                            } else q=1;
+                            if(q) {
+                                set t[3];
+                                SSET_SETSIZE(t,2);
+                                t[1]=s;
+                                SET_EMPTY(t[2]);
+                                for(j=1;j<MAXRANK;j++) if (IS_IN(t[1],j)) UNITE(t[2],BITN(mates[j]));
+                                gapsets(t);
+                                wrotesomething=1;
+                            }
+                        }
+                    }
+                }
             }
             if(!wrotesomething)printf(" [],\n");
         }
